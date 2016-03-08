@@ -1,0 +1,318 @@
+swagger: '2.0'
+info:
+  title: Happy Server API
+  description: For the server which makes with the happy affirmations.
+  version: "1.0.0"
+# the domain of the service
+# host: api.something-something.com
+
+# array of all schemes that your API supports
+schemes:
+  - https
+  
+securityDefinitions:
+  api_key:
+    type: apiKey
+    name: api_key
+    in: header
+  session_key:
+    type: apiKey
+    name: session
+    in: header
+
+security:
+  - api_key: []
+
+
+# will be prefixed to all paths
+basePath: /v1
+produces:
+  - application/json
+
+paths:
+  /statements:
+    get:
+      summary: Returns a list of daily statements
+      description: |
+        Returns a list of one or more statements, presumably happy ones, that
+        should be displayed to the user. Usually people are only able to see
+        one statement per day. The parameters control the date range defaulting
+        to just returning a single statement for the current day when no
+        parameters are given.
+        
+        Note that more than one statement may be returned for each day
+        depending on the user that is making the request.
+        
+      parameters:
+        - name: anchorDate
+          in: query
+          description: |
+            Anchor date used to define a range. Defaults to current date at 
+            the server
+          type: string
+          format: date
+        - name: days
+          in: query
+          description: |
+            Number of days, positive or negative, inclusive of the anchorDate
+            itself to return statements for.
+          type: integer
+          format: int32
+      tags:
+        - Anonymous
+        
+      responses:
+        200:
+          description: An array of statements
+          schema:
+            type: array
+            items:
+              $ref: '#/definitions/ReturnedStatement'
+        default:
+          description: Unexpected error
+          schema:
+            $ref: '#/definitions/Error'
+            
+  /statement:
+    put:
+      summary: Contribute a new statement
+      description: |
+        Add a new statement to the system
+      
+      security:
+        - session_key: []
+        
+      parameters:
+        - name: text
+          in: body
+          schema:
+            type: string
+
+      responses:
+        200:
+          description: Data about a single statement
+          schema:
+            $ref: '#/definitions/DetailedStatement'
+
+        default:
+          description: Unexpected error
+          schema:
+            $ref: '#/definitions/Error'
+            
+  /statement/{sid}:
+    get:
+      summary: Return details about a single statement
+      description: |
+        Use this to get "long" information about a specific statement. Right
+        now this isn't anything more than the regular data, but in the future
+        it might provide more insight into the number of likes or something
+        such as that
+        
+      parameters:
+        - name: sid
+          in: path
+          required: true
+          description: |
+            The id for the statment to return information about
+          type: string
+          
+      tags:
+        - Anonymous
+        
+      responses:
+        200:
+          description: Data about a single statement
+          schema:
+            $ref: '#/definitions/DetailedStatement'
+
+        404:
+          description: The id does not refer to a valid statement
+          schema:
+            $ref: '#/definitions/Error'            
+          
+        default:
+          description: Unexpected error
+          schema:
+            $ref: '#/definitions/Error'
+            
+    post:
+      summary: Update a statement which was previously made by the logged in user
+      description: |
+        Change a statement which was previously made by the user. The statement
+        can not be in the published state.
+        
+      parameters:
+        - name: sid
+          in: path
+          required: true
+          description: |
+            The id for the statment to return information about
+          type: string
+          
+      tags:
+        - Authenticated
+        
+      responses:
+        200:
+          description: Data about a single statement
+          schema:
+            $ref: '#/definitions/DetailedStatement'
+
+        404:
+          description: The id does not refer to a valid statement
+          schema:
+            $ref: '#/definitions/Error'            
+          
+        default:
+          description: Unexpected error
+          schema:
+            $ref: '#/definitions/Error'
+            
+  /me:
+    get:
+      summary: User Profile
+      description: The User Profile endpoint returns information about the Uber user that has authorized with the application.
+      tags:
+        - User
+      responses:
+        200:
+          description: Profile information for a user
+          schema:
+            $ref: '#/definitions/Profile'
+        default:
+          description: Unexpected error
+          schema:
+            $ref: '#/definitions/Error'
+
+            
+definitions:
+  Product:
+    type: object
+  PriceEstimate:
+    type: object
+  Profile:
+    type: object
+  Activities:
+    type: object
+
+  ReturnedStatement:
+    type: object
+    required:
+      - id
+      - text
+      - date
+      - contributor
+      - contributedOn
+    properties:
+      id:
+        type: string
+        description: Unique id for this statement
+      text:
+        type: string
+        description: The text of the statement
+      date:
+        type: string
+        description: The day the statement should be displayed
+      ordinal:
+        type: integer
+        description: |
+          When more than one statement is returned with a given date, they
+          should be sorted by ordinal from lowest to highest in the
+          natural order of the day. These ordinals may not be consecutive,
+          but will preserve the proper or intended ordering of the statements
+          within the day.
+          
+          If an ordinal is not specified the client is free to choose the
+          intra-day ordering of multiple statements
+      author:
+        type: string
+        description: |
+          The original author of the statement, if different from the
+          person who contributed the statement to the system.
+      contributor:
+        $ref: '#/definitions/ContributorRef'
+      contributedOn:
+        type: string
+        format: date
+        description: |
+          The date the statement was contributed to the system
+
+  DetailedStatement:
+    type: object
+    required:
+      - id
+      - text
+      - date
+      - contributor
+      - contributedOn
+    properties:
+      id:
+        type: string
+        description: Unique id for this statement
+      text:
+        type: string
+        description: The text of the statement
+      date:
+        type: string
+        description: The day the statement should be displayed, if any.
+      author:
+        type: string
+        description: |
+          The original author of the statement, if different from the
+          person who contributed the statement to the system.
+      contributor:
+        $ref: '#/definitions/ContributorRef'
+      contributedOn:
+        type: string
+        format: date
+        description: |
+          The date the statement was contributed to the system
+      state:
+        type: string
+        description: |
+          Indicates the state of the statement in the cycle of 
+          draft -> published -> approved -> retracted. Only statements in the draft
+          state can be edited by a user. Once they are published they
+          can then only be retracted, although a new statement can then be
+          created as a duplicate of the retracted statement so that it can
+          then be re-published.
+
+      
+  ContributorRef:
+    type: object
+    required:
+      - id
+      - name
+    properties:
+      id:
+        type: string
+        description: The id for this contributor
+      name:
+        type: string
+        description: |
+          The name of the contributor. This is denormalized into references
+          for convenience. The client is free to use this name or a
+          cached name for the contributor based on the id as the client
+          wishes.
+  Error:
+    type: object
+    properties:
+      code:
+        type: string
+        description: |
+          An opaque code which identifies the error. This is the field
+          that a client should examine to understand what type of error
+          occurred, not the message field. If a client wants to take
+          different actions based on an error, or display different
+          messages to a user, the client should match this code field
+          to a list of known codes and display a client specific human
+          readable message rather than using the message returned in the
+          other field as it probably has technical details in it that
+          the user will not be aware of otherwise.
+      message:
+        type: string
+        description: |
+          A human readable description of the error. This generally should
+          not be directly displayed to the user, but is useful to write
+          to a log file for debugging purposes.
+
